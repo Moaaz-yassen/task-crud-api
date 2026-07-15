@@ -15,9 +15,29 @@ app = FastAPI(
 )
 
 
-# ── Hello endpoint ───────────────────────────────────────────
-# This is our very first endpoint. It proves the server is alive.
-@app.get("/")
+# ════════════════════════════════════════════════════════════
+#  STAGE 1 — Root and health endpoints
+# ════════════════════════════════════════════════════════════
+
+@app.get(
+    "/",
+    summary="API info",
+    description="Returns the API name, version, and available endpoint paths.",
+)
 def root():
-    """GET / — hello message so we can confirm the server works."""
-    return {"message": "Hello from Task API!"}
+    """GET / — describes this API."""
+    return {
+        "name": "Task API",
+        "version": "1.0",
+        "endpoints": ["/tasks"],
+    }
+
+
+@app.get(
+    "/health",
+    summary="Health check",
+    description="Returns {'status': 'ok'} so a monitoring tool can confirm the server is alive.",
+)
+def health():
+    """GET /health — quick liveness check."""
+    return {"status": "ok"}
