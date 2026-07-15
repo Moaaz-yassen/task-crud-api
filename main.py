@@ -5,6 +5,7 @@
 # ============================================================
 
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
 # FastAPI() creates our application.
 # The title and description appear on the Swagger page at /docs.
@@ -24,6 +25,19 @@ tasks = [
     {"id": 2, "title": "Walk the dog",  "done": False},
     {"id": 3, "title": "Read a book",   "done": True},
 ]
+
+# We use a counter to give every new task a unique id.
+# Starting at 4 because our three seed tasks already used 1–3.
+next_id = 4
+
+
+# ── Request body models ──────────────────────────────────────
+# Pydantic models describe what JSON the client must send.
+# FastAPI validates the incoming JSON automatically against them.
+
+class TaskCreate(BaseModel):
+    """Body for POST /tasks — only title is required."""
+    title: str  # required field
 
 
 # ── Helper ───────────────────────────────────────────────────
@@ -89,3 +103,34 @@ def get_task(task_id: int):
         # 404 means "the thing you asked for does not exist"
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
     return task
+
+
+# ════════════════════════════════════════════════════════════
+#  STAGE 3 — Create: POST a new task
+# ════════════════════════════════════════════════════════════
+
+@app.post(
+    "/tasks",
+    status_code=201,
+    summary="Create a task",
+    description="Creates a new task. Body must include a non-empty `title`. Returns 201 with the created task.",
+)
+def create_task(body: TaskCreate):
+    """POST /tasks — creates a task (201) or 400 if title is missing/empty."""
+    global next_id  # we need to modify the module-level counter
+
+    # Validate: title must not be blank (FastAPI already ensures it's a string,
+    # but we also reject empty strings like "   ")
+    if not body.title.strip():
+        raise HTTPException(status_code=400, detail="title is required and cannot be empty")
+
+    # Build the new task and append it to our in-memory list
+    new_task = {
+        "id": next_id,
+        "title": body.title.strip(),
+        "done": False,
+    }
+    tasks.append(new_task)
+    next_id += 1  # increment so the next task gets a different id
+
+    return new_task
