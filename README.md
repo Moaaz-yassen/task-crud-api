@@ -171,3 +171,10 @@ Stage 4: full CRUD
 Stage 5: Swagger UI
 Stage 6: publish and docs
 ```
+
+---
+
+## Author
+
+Built as the W2 · A1 assignment for the FlyRank backend programme.
+
