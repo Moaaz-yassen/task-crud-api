@@ -5,7 +5,9 @@
 # ============================================================
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
+from typing import Optional
 
 # FastAPI() creates our application.
 # The title and description appear on the Swagger page at /docs.
@@ -38,6 +40,12 @@ next_id = 4
 class TaskCreate(BaseModel):
     """Body for POST /tasks — only title is required."""
     title: str  # required field
+
+class TaskUpdate(BaseModel):
+    """Body for PUT /tasks/{id} — both fields are optional so
+    the client can update just the title, just done, or both."""
+    title: Optional[str] = None
+    done: Optional[bool] = None
 
 
 # ── Helper ───────────────────────────────────────────────────
@@ -134,3 +142,54 @@ def create_task(body: TaskCreate):
     next_id += 1  # increment so the next task gets a different id
 
     return new_task
+
+
+# ════════════════════════════════════════════════════════════
+#  STAGE 4 — Update & Delete
+# ════════════════════════════════════════════════════════════
+
+@app.put(
+    "/tasks/{task_id}",
+    summary="Update a task",
+    description="Updates a task's `title` and/or `done` field. Returns the updated task. Returns 404 if not found, 400 if body is empty.",
+)
+def update_task(task_id: int, body: TaskUpdate):
+    """PUT /tasks/{id} — updates a task (200), 404, or 400."""
+    # 404 check
+    task = find_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    # 400 check — client must send at least one field to change
+    if body.title is None and body.done is None:
+        raise HTTPException(status_code=400, detail="Provide at least one field: title or done")
+
+    # Validate title if provided
+    if body.title is not None:
+        if not body.title.strip():
+            raise HTTPException(status_code=400, detail="title cannot be empty")
+        task["title"] = body.title.strip()
+
+    # Update done if provided
+    if body.done is not None:
+        task["done"] = body.done
+
+    return task
+
+
+@app.delete(
+    "/tasks/{task_id}",
+    status_code=204,
+    summary="Delete a task",
+    description="Deletes a task by id. Returns 204 No Content on success. Returns 404 if not found.",
+)
+def delete_task(task_id: int):
+    """DELETE /tasks/{id} — deletes a task (204) or 404."""
+    task = find_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    tasks.remove(task)
+
+    # 204 means "success, nothing to return" — we send an empty body
+    return Response(status_code=204)
