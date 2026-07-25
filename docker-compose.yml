@@ -1,0 +1,44 @@
+# ============================================================
+#  docker-compose.yml — starts app + database with one command:
+#  docker compose up
+# ============================================================
+
+services:
+
+  # ── PostgreSQL database ──────────────────────────────────
+  db:
+    image: postgres:16          # official Postgres image from Docker Hub
+    environment:
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB:       taskdb
+    volumes:
+      # Named volume: data persists even after 'docker compose down'
+      - postgres_data:/var/lib/postgresql/data
+      # init.sql runs automatically on the very first boot
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"             # expose Postgres so you can connect with DB tools
+    healthcheck:
+      # Wait until Postgres is ready before starting the app
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI application ──────────────────────────────────
+  app:
+    build: .                    # build from the Dockerfile in this folder
+    ports:
+      - "8000:8000"             # http://localhost:8000
+    environment:
+      # Override DATABASE_URL so the app connects to the 'db' service, not localhost
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/taskdb
+    depends_on:
+      db:
+        condition: service_healthy   # only start after Postgres passes the healthcheck
+
+# ── Named volume definition ──────────────────────────────────
+# Docker manages this volume — data lives here between restarts
+volumes:
+  postgres_data:
