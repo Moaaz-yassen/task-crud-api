@@ -1,54 +1,103 @@
 # ============================================================
 #  Task CRUD API — built with FastAPI (Python)
-#  Assignment: W2 · A1
+#  Assignment: W3 · A1 — Connecting your CRUD to the database
 #  Run with:  uvicorn main:app --reload
 # ============================================================
 
+import sqlite3                          # built into Python — no install needed
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
 
-# FastAPI() creates our application.
-# The title and description appear on the Swagger page at /docs.
+# ── App setup ───────────────────────────────────────────────
 app = FastAPI(
     title="Task API",
-    description="A simple CRUD API for managing tasks. Built for the W2·A1 assignment.",
-    version="1.0",
+    description="A simple CRUD API for managing tasks. Data is stored in SQLite.",
+    version="2.0",
 )
 
 
-# ── In-memory "database" ─────────────────────────────────────
-# This is just a Python list. All tasks live here while the
-# server is running. Restarting the server wipes this list —
-# that's intentional; a real database fixes that (next week).
-tasks = [
-    {"id": 1, "title": "Buy groceries", "done": False},
-    {"id": 2, "title": "Walk the dog",  "done": False},
-    {"id": 3, "title": "Read a book",   "done": True},
-]
+# ════════════════════════════════════════════════════════════
+#  STAGE 0 — SQLite database setup
+# ════════════════════════════════════════════════════════════
 
-# We use a counter to give every new task a unique id.
-# Starting at 4 because our three seed tasks already used 1–3.
-next_id = 4
+# The database lives in a single file next to main.py.
+# SQLite creates this file automatically the first time the app runs.
+DB_PATH = "tasks.db"
+
+
+def get_db():
+    """
+    Open and return a connection to tasks.db.
+
+    row_factory = sqlite3.Row lets us access columns by name
+    (e.g. row["title"]) instead of by index (row[1]).
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    """
+    Run once at startup:
+      1. Create the tasks table if it does not already exist.
+      2. Insert three sample tasks ONLY if the table is empty.
+
+    This means restarting the server never duplicates data.
+    """
+    conn = get_db()
+    cur = conn.cursor()
+
+    # CREATE TABLE IF NOT EXISTS means this is completely safe to run
+    # on every restart — it does nothing if the table already exists.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tasks (
+            id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT    NOT NULL,
+            done  BOOLEAN NOT NULL DEFAULT 0
+        )
+    """)
+
+    # Only seed sample data when the table is brand new (empty).
+    cur.execute("SELECT COUNT(*) FROM tasks")
+    count = cur.fetchone()[0]   # fetchone()[0] is the integer count
+
+    if count == 0:
+        # executemany inserts all three rows in one call
+        cur.executemany(
+            "INSERT INTO tasks (title, done) VALUES (?, ?)",
+            [
+                ("Buy groceries", False),
+                ("Walk the dog",  False),
+                ("Read a book",   True),
+            ],
+        )
+
+    conn.commit()   # save everything to disk
+    conn.close()
+
+
+# Call init_db() immediately when the module loads.
+# This runs before any request is handled.
+init_db()
 
 
 # ── Request body models ──────────────────────────────────────
-# Pydantic models describe what JSON the client must send.
-# FastAPI validates the incoming JSON automatically against them.
+# (unchanged from A1)
 
 class TaskCreate(BaseModel):
     """Body for POST /tasks — only title is required."""
-    title: str  # required field
+    title: str
 
 class TaskUpdate(BaseModel):
-    """Body for PUT /tasks/{id} — both fields are optional so
-    the client can update just the title, just done, or both."""
+    """Body for PUT /tasks/{id} — both fields are optional."""
     title: Optional[str] = None
     done: Optional[bool] = None
 
 
-# ── Helper ───────────────────────────────────────────────────
+# ── Helper (still used by the in-memory routes below) ────────
 def find_task(task_id: int):
     """Return the task dict with the given id, or None."""
     for task in tasks:
@@ -57,139 +106,81 @@ def find_task(task_id: int):
     return None
 
 
+# ── In-memory list (temporary — will be removed in Stage 1–3) ─
+# Keeping this so the API keeps working while we migrate stage by stage.
+tasks = [
+    {"id": 1, "title": "Buy groceries", "done": False},
+    {"id": 2, "title": "Walk the dog",  "done": False},
+    {"id": 3, "title": "Read a book",   "done": True},
+]
+next_id = 4
+
+
 # ════════════════════════════════════════════════════════════
-#  STAGE 1 — Root and health endpoints
+#  API Routes (unchanged from A1)
 # ════════════════════════════════════════════════════════════
 
-@app.get(
-    "/",
-    summary="API info",
-    description="Returns the API name, version, and available endpoint paths.",
-)
+@app.get("/", summary="API info",
+         description="Returns the API name, version, and available endpoint paths.")
 def root():
-    """GET / — describes this API."""
-    return {
-        "name": "Task API",
-        "version": "1.0",
-        "endpoints": ["/tasks"],
-    }
+    return {"name": "Task API", "version": "2.0", "endpoints": ["/tasks"]}
 
 
-@app.get(
-    "/health",
-    summary="Health check",
-    description="Returns {'status': 'ok'} so a monitoring tool can confirm the server is alive.",
-)
+@app.get("/health", summary="Health check",
+         description="Returns {'status': 'ok'} to confirm the server is alive.")
 def health():
-    """GET /health — quick liveness check."""
     return {"status": "ok"}
 
 
-# ════════════════════════════════════════════════════════════
-#  STAGE 2 — Read: list all tasks and get one task
-# ════════════════════════════════════════════════════════════
-
-@app.get(
-    "/tasks",
-    summary="List all tasks",
-    description="Returns the full list of tasks currently in memory.",
-)
+@app.get("/tasks", summary="List all tasks",
+         description="Returns all tasks.")
 def list_tasks():
-    """GET /tasks — returns all tasks (200 OK)."""
     return tasks
 
 
-@app.get(
-    "/tasks/{task_id}",
-    summary="Get a single task",
-    description="Returns one task by its id. Returns 404 if no task has that id.",
-)
+@app.get("/tasks/{task_id}", summary="Get a single task",
+         description="Returns one task by id. Returns 404 if not found.")
 def get_task(task_id: int):
-    """GET /tasks/{id} — returns one task (200) or 404."""
     task = find_task(task_id)
     if task is None:
-        # 404 means "the thing you asked for does not exist"
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
     return task
 
 
-# ════════════════════════════════════════════════════════════
-#  STAGE 3 — Create: POST a new task
-# ════════════════════════════════════════════════════════════
-
-@app.post(
-    "/tasks",
-    status_code=201,
-    summary="Create a task",
-    description="Creates a new task. Body must include a non-empty `title`. Returns 201 with the created task.",
-)
+@app.post("/tasks", status_code=201, summary="Create a task",
+          description="Creates a new task. title is required. Returns 201.")
 def create_task(body: TaskCreate):
-    """POST /tasks — creates a task (201) or 400 if title is missing/empty."""
-    global next_id  # we need to modify the module-level counter
-
-    # Validate: title must not be blank (FastAPI already ensures it's a string,
-    # but we also reject empty strings like "   ")
+    global next_id
     if not body.title.strip():
         raise HTTPException(status_code=400, detail="title is required and cannot be empty")
-
-    # Build the new task and append it to our in-memory list
-    new_task = {
-        "id": next_id,
-        "title": body.title.strip(),
-        "done": False,
-    }
+    new_task = {"id": next_id, "title": body.title.strip(), "done": False}
     tasks.append(new_task)
-    next_id += 1  # increment so the next task gets a different id
-
+    next_id += 1
     return new_task
 
 
-# ════════════════════════════════════════════════════════════
-#  STAGE 4 — Update & Delete
-# ════════════════════════════════════════════════════════════
-
-@app.put(
-    "/tasks/{task_id}",
-    summary="Update a task",
-    description="Updates a task's `title` and/or `done` field. Returns the updated task. Returns 404 if not found, 400 if body is empty.",
-)
+@app.put("/tasks/{task_id}", summary="Update a task",
+         description="Updates title and/or done. Returns 404 or 400 when appropriate.")
 def update_task(task_id: int, body: TaskUpdate):
-    """PUT /tasks/{id} — updates a task (200), 404, or 400."""
-    # 404 check
     task = find_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-
-    # 400 check — client must send at least one field to change
     if body.title is None and body.done is None:
         raise HTTPException(status_code=400, detail="Provide at least one field: title or done")
-
-    # Validate title if provided
     if body.title is not None:
         if not body.title.strip():
             raise HTTPException(status_code=400, detail="title cannot be empty")
         task["title"] = body.title.strip()
-
-    # Update done if provided
     if body.done is not None:
         task["done"] = body.done
-
     return task
 
 
-@app.delete(
-    "/tasks/{task_id}",
-    status_code=204,
-    summary="Delete a task",
-    description="Deletes a task by id. Returns 204 No Content on success. Returns 404 if not found.",
-)
+@app.delete("/tasks/{task_id}", status_code=204, summary="Delete a task",
+            description="Deletes a task. Returns 204 on success, 404 if not found.")
 def delete_task(task_id: int):
-    """DELETE /tasks/{id} — deletes a task (204) or 404."""
     task = find_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-
     tasks.remove(task)
-
-    # 204 means "success, nothing to return" — we send an empty body
     return Response(status_code=204)

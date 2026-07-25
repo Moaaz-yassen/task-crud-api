@@ -16,3 +16,6 @@ env/
 # OS files
 .DS_Store
 Thumbs.db
+
+# SQLite database (auto-created on first run — not source code)
+tasks.db
