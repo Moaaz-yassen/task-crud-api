@@ -1,82 +1,98 @@
 # Task CRUD API
 
 A simple REST API for managing a to-do list, built with **Python + FastAPI**.
-Data is stored in a **SQLite database** (`tasks.db`) — no server, no setup, just a file.
-Built for the **W3 · A1 assignment** (FlyRank backend programme).
+Data is stored in **PostgreSQL**, running in **Docker**.
+The entire stack starts with a single command: `docker compose up`.
+
+Built for the **FlyRank backend programme** (Assignments A1 → A2 → A3).
 
 ---
 
-## What changed from Assignment 1
+## Assignment history
 
-In Assignment 1, tasks were stored in a Python list in memory.
-Every time the server restarted, all data was lost.
+| Assignment | Storage | Run command |
+|-----------|---------|-------------|
+| A1 | Python list (in-memory) | `uvicorn main:app --reload` |
+| A2 (W3·A1) | SQLite file (`tasks.db`) | `uvicorn main:app --reload` |
+| **A3 (current)** | **PostgreSQL in Docker** | **`docker compose up`** |
 
-In this assignment, tasks are stored in a **SQLite database file** (`tasks.db`).
-Data now survives server restarts.
-
-> The API endpoints, request bodies, and responses are **identical** to Assignment 1.
+> The API endpoints, request bodies, responses, and status codes are **identical** across all three assignments.
 > Only the storage layer changed — the client never noticed.
 
 ---
 
-## Why SQLite?
+## Architecture
 
-| Reason | Detail |
-|--------|--------|
-| **Zero setup** | No database server to install or run |
-| **Single file** | The entire database is one file: `tasks.db` |
-| **Built into Python** | Uses the `sqlite3` module — no extra packages |
-| **Perfect for learning** | Same SQL you'll use with PostgreSQL later |
+```
+docker compose up
+      │
+      ├── db  (postgres:16, port 5432)
+      │    ├── volume: postgres_data  ← data survives restarts
+      │    └── init.sql               ← creates table + 3 seed tasks on first boot
+      │
+      └── app (FastAPI, port 8000)
+           ├── main.py        ← routes (unchanged from A1)
+           ├── repository.py  ← all SQL queries live here
+           └── database.py    ← reads DATABASE_URL from .env
+```
+
+### Why repository pattern?
+
+`main.py` routes call `repo.get_all()`, `repo.create()`, etc.
+`repository.py` is the **only** file that knows PostgreSQL exists.
+To switch to a different database, only `repository.py` changes — routes stay untouched.
 
 ---
 
-## Where is `tasks.db` stored?
+## Prerequisites
 
-The file is created automatically **next to `main.py`** the first time the server starts:
-
-```
-Task Crud Api/
-├── main.py       ← API logic + SQL queries
-├── tasks.db      ← SQLite database (auto-created, gitignored)
-├── requirements.txt
-└── README.md
-```
-
-`tasks.db` is listed in `.gitignore` — it is generated data, not source code.
-Anyone who clones the repo gets a fresh database created automatically on first run.
+- [Docker Desktop](https://www.docker.com/products/docker-desktop) (free) — must be running
 
 ---
 
-## Installation
+## Environment variables
 
-**Requirements:** Python 3.10 or higher.
+Copy `.env.example` to `.env` before running:
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/Moaaz-yassen/task-crud-api.git
-cd task-crud-api
-
-# 2. (Recommended) create a virtual environment
-python -m venv .venv
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # Mac / Linux
-
-# 3. Install dependencies
-pip install -r requirements.txt
+cp .env.example .env      # Mac / Linux
+copy .env.example .env    # Windows
 ```
+
+| Variable | Example value | Description |
+|----------|--------------|-------------|
+| `DATABASE_URL` | `postgresql://postgres:postgres@db:5432/taskdb` | Postgres connection string |
+
+> `.env` is listed in `.gitignore` — it is never committed.
+> `.env.example` is committed so anyone can clone and run immediately.
 
 ---
 
 ## How to run
 
 ```bash
-uvicorn main:app --reload
+docker compose up
 ```
 
-- Server starts on **http://localhost:8000**
-- `tasks.db` is created automatically if it does not exist
-- Three sample tasks are inserted automatically on the first run only
-- Restarting the server **never duplicates** the sample data
+That's it. Docker will:
+1. Pull the `postgres:16` image
+2. Build the FastAPI app image
+3. Start Postgres, wait for it to be ready
+4. Start the FastAPI app
+5. Create the `tasks` table and insert 3 seed tasks (first run only)
+
+Open **http://localhost:8000/docs** to see the Swagger UI.
+
+To stop:
+```bash
+docker compose down        # stops containers, keeps data
+docker compose down -v     # stops containers AND deletes all data
+```
+
+To rebuild after code changes:
+```bash
+docker compose up --build
+```
 
 ---
 
@@ -86,57 +102,11 @@ uvicorn main:app --reload
 |--------|------|-------------|-------------|
 | GET | `/` | 200 | API name and version |
 | GET | `/health` | 200 | Liveness check |
-| GET | `/tasks` | 200 | List all tasks from the database |
+| GET | `/tasks` | 200 | List all tasks |
 | GET | `/tasks/{id}` | 200, 404 | Get one task by id |
 | POST | `/tasks` | 201, 400 | Create a new task |
-| PUT | `/tasks/{id}` | 200, 400, 404 | Update a task's title and/or done |
+| PUT | `/tasks/{id}` | 200, 400, 404 | Update a task |
 | DELETE | `/tasks/{id}` | 204, 404 | Delete a task |
-
----
-
-## Swagger UI
-
-Open **http://localhost:8000/docs** to see all endpoints and test them interactively.
-
-![Swagger UI](swagger.png)
-
----
-
-## Database viewer — DB Browser for SQLite
-
-Download **DB Browser for SQLite** (free): https://sqlitebrowser.org/dl/
-
-Open `tasks.db` with it to browse and edit data visually.
-
-> **Screenshot placeholder**
-> Take a screenshot of DB Browser showing the tasks table and save it as `db-browser.png`.
-> Then replace this line with: `![DB Browser](db-browser.png)`
-
----
-
-## Example SQL queries
-
-Run these in DB Browser → **Execute SQL** tab:
-
-```sql
--- List every task
-SELECT * FROM tasks;
-
--- Show only completed tasks
-SELECT * FROM tasks WHERE done = 1;
-
--- Count all tasks
-SELECT COUNT(*) FROM tasks;
-
--- Mark every task as completed
-UPDATE tasks SET done = 1;
-
--- Delete all completed tasks
-DELETE FROM tasks WHERE done = 1;
-```
-
-After running `UPDATE` or `DELETE`, click **"Write Changes"** in DB Browser,
-then refresh **http://localhost:8000/tasks** — the API immediately reflects the changes.
 
 ---
 
@@ -162,31 +132,63 @@ curl -i -X DELETE http://localhost:8000/tasks/1
 
 ---
 
-## Persistence — proved
+## Persistence — how it was verified
 
-1. Start the server: `uvicorn main:app --reload`
-2. Create a task via `POST /tasks`
-3. Stop the server: `Ctrl + C`
-4. Start again: `uvicorn main:app --reload`
-5. Run `GET /tasks` — the task is still there ✅
+1. `docker compose up` — server started, 3 seed tasks visible at `GET /tasks`
+2. `POST /tasks` with `{"title": "Test persistence"}` — new task created (id = 4)
+3. `docker compose down` — containers stopped
+4. `docker compose up` — containers restarted
+5. `GET /tasks` — all 4 tasks still present ✅
 
-This is the key difference from Assignment 1: data now survives restarts.
+The data survives because PostgreSQL stores it in the `postgres_data` Docker volume,
+not inside the container itself. Volumes are not deleted by `docker compose down`.
+
+---
+
+## Swagger UI
+
+Open **http://localhost:8000/docs** after running `docker compose up`.
+
+![Swagger UI](swagger.png)
+
+---
+
+## Project structure
+
+```
+Task Crud Api/
+├── main.py             ← API routes (unchanged from A1)
+├── repository.py       ← all PostgreSQL queries
+├── database.py         ← connection helper (reads from .env)
+├── init.sql            ← creates table + seeds data on first Postgres boot
+├── Dockerfile          ← builds the FastAPI app container
+├── docker-compose.yml  ← starts app + db with one command
+├── .env                ← your connection string (gitignored)
+├── .env.example        ← template (committed)
+├── requirements.txt
+└── README.md
+```
 
 ---
 
 ## Git history
 
 ```
-Stage 0: create SQLite database
-Stage 1: database read endpoints
-Stage 2: insert into database
-Stage 3: update and delete with SQL
-Stage 4: explored SQLite
-Stage 5: database documentation
+Stage 0: hello server                        (A1)
+Stage 1: root and health endpoints           (A1)
+Stage 2: read endpoints with 404             (A1)
+Stage 3: create with validation              (A1)
+Stage 4: full CRUD                           (A1)
+Stage 5: Swagger UI                          (A1)
+Stage 6: publish and docs                    (A1)
+Stage 0: create SQLite database              (W3·A1)
+Stage 1: database read endpoints             (W3·A1)
+Stage 2: insert into database                (W3·A1)
+Stage 3: update and delete with SQL          (W3·A1)
+Stage 4: explored SQLite                     (W3·A1)
+Stage 5: database documentation              (W3·A1)
+A2 Stage 1: swap SQLite for Postgres repository
+A2 Stage 2: add init.sql for table creation
+A2 Stage 3: add Dockerfile and docker-compose
+A2 Stage 4: update README for PostgreSQL and Docker
 ```
-
----
-
-## Author
-
-Built as the W3 · A1 assignment for the FlyRank backend programme.
