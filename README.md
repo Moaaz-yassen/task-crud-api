@@ -1,22 +1,49 @@
 # Task CRUD API
 
-A simple REST API for managing a to-do list, built with **Python + FastAPI**.  
-All data is stored **in memory** — no database, no files.  
-Built as the **W2 · A1 assignment** for the FlyRank backend programme.
+A simple REST API for managing a to-do list, built with **Python + FastAPI**.
+Data is stored in a **SQLite database** (`tasks.db`) — no server, no setup, just a file.
+Built for the **W3 · A1 assignment** (FlyRank backend programme).
 
 ---
 
-## What this is
+## What changed from Assignment 1
 
-This API lets any HTTP client (browser, curl, Swagger UI, a mobile app) create, read, update and delete tasks.  
-It demonstrates the four **CRUD** operations mapped onto HTTP methods:
+In Assignment 1, tasks were stored in a Python list in memory.
+Every time the server restarted, all data was lost.
 
-| CRUD | HTTP method | Endpoint |
-|------|-------------|----------|
-| Create | POST | `POST /tasks` |
-| Read | GET | `GET /tasks` · `GET /tasks/{id}` |
-| Update | PUT | `PUT /tasks/{id}` |
-| Delete | DELETE | `DELETE /tasks/{id}` |
+In this assignment, tasks are stored in a **SQLite database file** (`tasks.db`).
+Data now survives server restarts.
+
+> The API endpoints, request bodies, and responses are **identical** to Assignment 1.
+> Only the storage layer changed — the client never noticed.
+
+---
+
+## Why SQLite?
+
+| Reason | Detail |
+|--------|--------|
+| **Zero setup** | No database server to install or run |
+| **Single file** | The entire database is one file: `tasks.db` |
+| **Built into Python** | Uses the `sqlite3` module — no extra packages |
+| **Perfect for learning** | Same SQL you'll use with PostgreSQL later |
+
+---
+
+## Where is `tasks.db` stored?
+
+The file is created automatically **next to `main.py`** the first time the server starts:
+
+```
+Task Crud Api/
+├── main.py       ← API logic + SQL queries
+├── tasks.db      ← SQLite database (auto-created, gitignored)
+├── requirements.txt
+└── README.md
+```
+
+`tasks.db` is listed in `.gitignore` — it is generated data, not source code.
+Anyone who clones the repo gets a fresh database created automatically on first run.
 
 ---
 
@@ -26,10 +53,10 @@ It demonstrates the four **CRUD** operations mapped onto HTTP methods:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-cd YOUR_REPO_NAME
+git clone https://github.com/Moaaz-yassen/task-crud-api.git
+cd task-crud-api
 
-# 2. (Optional but recommended) create a virtual environment
+# 2. (Recommended) create a virtual environment
 python -m venv .venv
 .venv\Scripts\activate        # Windows
 # source .venv/bin/activate   # Mac / Linux
@@ -40,14 +67,16 @@ pip install -r requirements.txt
 
 ---
 
-## Run the server
+## How to run
 
 ```bash
 uvicorn main:app --reload
 ```
 
-The server starts on **http://localhost:8000**.  
-`--reload` restarts automatically when you edit `main.py`.
+- Server starts on **http://localhost:8000**
+- `tasks.db` is created automatically if it does not exist
+- Three sample tasks are inserted automatically on the first run only
+- Restarting the server **never duplicates** the sample data
 
 ---
 
@@ -55,9 +84,9 @@ The server starts on **http://localhost:8000**.
 
 | Method | Path | Status codes | Description |
 |--------|------|-------------|-------------|
-| GET | `/` | 200 | API name, version and available paths |
-| GET | `/health` | 200 | Liveness check — returns `{"status": "ok"}` |
-| GET | `/tasks` | 200 | List all tasks |
+| GET | `/` | 200 | API name and version |
+| GET | `/health` | 200 | Liveness check |
+| GET | `/tasks` | 200 | List all tasks from the database |
 | GET | `/tasks/{id}` | 200, 404 | Get one task by id |
 | POST | `/tasks` | 201, 400 | Create a new task |
 | PUT | `/tasks/{id}` | 200, 400, 404 | Update a task's title and/or done |
@@ -65,116 +94,99 @@ The server starts on **http://localhost:8000**.
 
 ---
 
-## Swagger UI (interactive docs)
+## Swagger UI
 
-FastAPI generates interactive documentation automatically.  
-Open **http://localhost:8000/docs** in your browser to see all endpoints and use the **"Try it out"** button to test them without curl.
+Open **http://localhost:8000/docs** to see all endpoints and test them interactively.
 
-> **Screenshot placeholder**  
-> After running the server, take a screenshot of http://localhost:8000/docs and save it as `swagger.png` in the root of this repo. Then replace this line with:  
-> `![Swagger UI](swagger.png)`
+![Swagger UI](swagger.png)
+
+---
+
+## Database viewer — DB Browser for SQLite
+
+Download **DB Browser for SQLite** (free): https://sqlitebrowser.org/dl/
+
+Open `tasks.db` with it to browse and edit data visually.
+
+> **Screenshot placeholder**
+> Take a screenshot of DB Browser showing the tasks table and save it as `db-browser.png`.
+> Then replace this line with: `![DB Browser](db-browser.png)`
+
+---
+
+## Example SQL queries
+
+Run these in DB Browser → **Execute SQL** tab:
+
+```sql
+-- List every task
+SELECT * FROM tasks;
+
+-- Show only completed tasks
+SELECT * FROM tasks WHERE done = 1;
+
+-- Count all tasks
+SELECT COUNT(*) FROM tasks;
+
+-- Mark every task as completed
+UPDATE tasks SET done = 1;
+
+-- Delete all completed tasks
+DELETE FROM tasks WHERE done = 1;
+```
+
+After running `UPDATE` or `DELETE`, click **"Write Changes"** in DB Browser,
+then refresh **http://localhost:8000/tasks** — the API immediately reflects the changes.
 
 ---
 
 ## Example curl requests
 
-### Create a task (POST)
 ```bash
+# List all tasks
+curl -i http://localhost:8000/tasks
+
+# Create a task
 curl -i -X POST http://localhost:8000/tasks \
   -H "Content-Type: application/json" \
   -d '{"title": "Buy milk"}'
-```
 
-**Expected output:**
-```
-HTTP/1.1 201 Created
-content-type: application/json
-
-{"id":4,"title":"Buy milk","done":false}
-```
-
-### List all tasks (GET)
-```bash
-curl -i http://localhost:8000/tasks
-```
-
-### Get one task (GET)
-```bash
-curl -i http://localhost:8000/tasks/1
-```
-
-### Update a task (PUT)
-```bash
+# Update a task
 curl -i -X PUT http://localhost:8000/tasks/1 \
   -H "Content-Type: application/json" \
   -d '{"done": true}'
-```
 
-### Delete a task (DELETE)
-```bash
+# Delete a task
 curl -i -X DELETE http://localhost:8000/tasks/1
 ```
-*(Returns 204 No Content — empty body, which means success.)*
-
-### Trigger a 404
-```bash
-curl -i http://localhost:8000/tasks/99
-```
-
-### Trigger a 400 (missing title)
-```bash
-curl -i -X POST http://localhost:8000/tasks \
-  -H "Content-Type: application/json" \
-  -d '{}'
-```
 
 ---
 
-## Status codes used
+## Persistence — proved
 
-| Code | Meaning | When |
-|------|---------|------|
-| 200 | OK | Successful GET or PUT |
-| 201 | Created | Successful POST |
-| 204 | No Content | Successful DELETE |
-| 400 | Bad Request | Missing or empty `title` |
-| 404 | Not Found | No task with that id |
+1. Start the server: `uvicorn main:app --reload`
+2. Create a task via `POST /tasks`
+3. Stop the server: `Ctrl + C`
+4. Start again: `uvicorn main:app --reload`
+5. Run `GET /tasks` — the task is still there ✅
 
----
-
-## Project structure
-
-```
-Task Crud Api/
-├── main.py           # All API logic — one file, heavily commented
-├── requirements.txt  # Python dependencies
-├── .gitignore        # Ignores __pycache__, .venv, etc.
-└── README.md         # This file
-```
-
----
-
-## In-memory storage — a note
-
-Tasks exist only while the server is running. Restart it and the list resets to the three seed tasks. This is intentional for this assignment — a real database (coming next week) exists to solve exactly this problem.
+This is the key difference from Assignment 1: data now survives restarts.
 
 ---
 
 ## Git history
 
 ```
-Stage 0: hello server
-Stage 1: root and health endpoints
-Stage 2: read endpoints with 404
-Stage 3: create with validation
-Stage 4: full CRUD
-Stage 5: Swagger UI
-Stage 6: publish and docs
+Stage 0: create SQLite database
+Stage 1: database read endpoints
+Stage 2: insert into database
+Stage 3: update and delete with SQL
+Stage 4: explored SQLite
+Stage 5: database documentation
 ```
 
 ---
 
 ## Author
 
-Built as the W2 · A1 assignment for the FlyRank backend programme.
-
+Built as the W3 · A1 assignment for the FlyRank backend programme.
