@@ -19,3 +19,6 @@ Thumbs.db
 
 # SQLite database (auto-created on first run — not source code)
 tasks.db
+
+# Environment variables — contains real credentials, never commit
+.env
