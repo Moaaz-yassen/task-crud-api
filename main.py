@@ -1,9 +1,10 @@
 # ============================================================
 #  Task CRUD API — built with FastAPI (Python)
-#  Assignment: A2 — PostgreSQL + Docker
-#  Run with:   docker compose up
+#  Assignment: A3 — Auth Login & Protect
+#  Run with:   uvicorn main:app --reload
 # ============================================================
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -12,12 +13,23 @@ from typing import Optional
 # Import the single shared repository instance.
 # All database logic lives in repository.py — not here.
 from repository import repo
+from supabase_client import supabase
+
+# ── Startup event ───────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # This runs once when the server starts
+    print("\n✅ Server running and connected to Supabase\n")
+    yield
+    # (nothing special on shutdown)
+
 
 # ── App setup ───────────────────────────────────────────────
 app = FastAPI(
     title="Task API",
-    description="A simple CRUD API backed by PostgreSQL. Run with docker compose up.",
-    version="3.0",
+    description="A simple CRUD API with Authentication via Supabase.",
+    version="4.0",
+    lifespan=lifespan,
 )
 
 
