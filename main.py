@@ -15,6 +15,7 @@ from typing import Optional
 from repository import repo
 from supabase_client import supabase
 from auth import router as auth_router
+from protected import public_router, protected_router
 
 
 # ── Startup event ───────────────────────────────────────────
@@ -36,6 +37,11 @@ app = FastAPI(
 
 # Register the auth routes (/auth/signup, /auth/login, /auth/logout)
 app.include_router(auth_router)
+
+# Register public and protected routes
+app.include_router(public_router)
+app.include_router(protected_router)
+
 
 
 # ── Request body models ──────────────────────────────────────
