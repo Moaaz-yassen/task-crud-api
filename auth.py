@@ -5,8 +5,10 @@
 #  POST /auth/logout  (added in Stage 4)
 # ============================================================
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from supabase_client import supabase
+from dependencies import get_current_user
 from supabase_client import supabase
 
 # APIRouter lets us group related routes and include them in main.py
@@ -98,3 +100,25 @@ def login(body: AuthBody):
         "refresh_token": response.session.refresh_token,
         "token_type":    "bearer",
     }
+
+
+# ════════════════════════════════════════════════════════════
+#  STAGE 4 — Log Out
+# ════════════════════════════════════════════════════════════
+
+@router.post("/logout", status_code=204, summary="Log out the current user")
+def logout(user = Depends(get_current_user)):
+    """
+    POST /auth/logout
+
+    Logs the user out. Requires a valid Bearer token.
+    Returns 204 No Content on success.
+    """
+    try:
+        # Sign out from Supabase (clears the session)
+        supabase.auth.sign_out()
+    except Exception:
+        pass
+    
+    return
+
