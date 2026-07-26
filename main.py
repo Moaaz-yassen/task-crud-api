@@ -14,6 +14,8 @@ from typing import Optional
 # All database logic lives in repository.py — not here.
 from repository import repo
 from supabase_client import supabase
+from auth import router as auth_router
+
 
 # ── Startup event ───────────────────────────────────────────
 @asynccontextmanager
@@ -32,8 +34,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Register the auth routes (/auth/signup, /auth/login, /auth/logout)
+app.include_router(auth_router)
+
 
 # ── Request body models ──────────────────────────────────────
+
 # These are identical to A1 — the API contract has not changed.
 
 class TaskCreate(BaseModel):
